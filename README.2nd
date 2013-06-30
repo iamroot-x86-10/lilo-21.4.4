@@ -1,0 +1,27 @@
+Notes to accompany the DISK.COM utility.
+
+DISK.COM is a small utility used to interrogate the BIOS about the
+support for disks at boot time.  It displays the geometry information
+for each disk as returned by the BIOS.  It should be run as close to
+the BIOS as possible.
+
+Option 1:  Boot Windows 98 to the Command Prompt only.  Then run
+DISK.COM, and check the output to see if your BIOS supports EDD
+version 1.0 or later.
+
+Option 2:  Boot DOS from a floppy disk.  Then run DISK.COM as above.
+
+Option 3:  Create a bootable floppy.  First put a formatted floppy disk
+in the A-drive.  Then run "make floppy".  This will create DISK.COM,
+and write a bootable copy to the floppy drive.
+
+This is the most reliable way to check your BIOS for EDD support.
+
+Remember:  If your BIOS does not have EDD support for large drives,
+LILO version 21.5 will not be able to boot beyond cylinder 1023.  If
+your BIOS has EDD support, then using LILO version 21.5 with the '-L'
+switch (or 'lba32' in the 'lilo.conf' file) will avoid the 1024
+cylinder limitation.
+
+--John Coffman     20-May-2000
+

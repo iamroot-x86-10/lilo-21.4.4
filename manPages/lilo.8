@@ -1,0 +1,182 @@
+'\" t
+.\" @(#)lilo.8 1.0 950728 aeb
+.\" This page is based on the lilo docs, which carry the following
+.\" COPYING condition:
+.\"
+.\" LILO program code, documentation and auxiliary programs are
+.\" Copyright 1992-1994 Werner Almesberger.
+.\" All rights reserved.
+.\" 
+.\" Redistribution and use in source and binary forms of parts of or the
+.\" whole original or derived work are permitted provided that the
+.\" original work is properly attributed to the author. The name of the
+.\" author may not be used to endorse or promote products derived from
+.\" this software without specific prior written permission. This work
+.\" is provided "as is" and without any express or implied warranties.
+.\"
+.\" Original version, Andries Brouwer (aeb@cwi.nl), 950728
+.\" Added t directive, as Daniel Quinlan asked, 950824
+.\" Added L switch, John Coffman, 991118
+.\"
+.TH LILO 8 "20 March 2000"
+.SH NAME
+lilo \- install boot loader
+.SH SYNOPSIS
+Main function:
+.LP
+.B " /sbin/lilo"
+\- install boot loader
+.LP
+Auxiliary uses:
+.LP
+.B " /sbin/lilo -q"
+\- query map
+.br
+.B " /sbin/lilo -R"
+\- set default command line for next reboot
+.br
+.B " /sbin/lilo -I"
+\- inquire path name of current kernel
+.br
+.B " /sbin/lilo {-u|-U}"
+\- uninstall lilo
+.SH DESCRIPTION
+.LP
+.B lilo
+installs a boot loader that will be activated next time you boot.
+It has lots of options.
+.LP
+.TP
+.B \-\^v
+Increase verbosity. Giving one or more \fB-v\fP options
+will make lilo more verbose.
+.TP
+.B \-\^q
+List the currently mapped files.
+.B lilo
+maintains a file, by default
+.IR "/boot/map" ,
+containing the name and location of the kernel(s) to boot.
+This option will list the names therein.
+.TP
+.BI "\-\^m " map-file
+Use specified map file instead of the default.
+.TP
+.BI "\-\^C " config-file
+.B lilo
+reads its instructions about what files to map from its
+config file, by default
+.IR "/etc/lilo.conf" .
+This option can be used to specify a non-default config file.
+.TP
+.BI "\-\^d " delay
+If you have specified several kernels, and press Shift at boot-time,
+the boot loader will present you with a choice of which system
+to boot. After a timeout period the first kernel in the list
+is booted. This option specifies the timeout delay in deciseconds.
+.TP
+.BI "\-\^D " label
+Use the kernel with the given label, instead of the first one
+in the list, as the default kernel to boot.
+.TP
+.BI "\-\^r " root-directory
+Before doing anything else, do a \fIchroot\fP to the indicated
+directory. Used for repairing a setup from a boot floppy.
+.TP
+.BI "\-\^t "
+Test only. Do not really write a new boot sector or map file.
+Use together with \fB-v\fP to find out what
+.B lilo
+is about to do.
+.TP
+.B "\-\^c"
+Enable map compaction. This will merge read requests from adjacent
+sectors. Speeds up the booting (especially from floppy).
+.TP
+.BI "\-\^f " disk-tab
+Specify disk geometry parameter file. (The default is
+.IR /etc/disktab .)
+.TP
+.BI "\-\^i " boot-sector
+Specify a file to be used as the new boot sector. (The default is
+.IR /boot/boot.b .)
+.TP
+.BI "\-\^l"
+Generate linear sector addresses instead of sector/head/cylinder
+addresses.
+.TP
+.BI "\-\^L"
+Generate 32-bit Logical Block Addresses instead of C:H:S addresses, allowing
+access to all partitions on disks greater than 8.4Gb.
+.TP
+.BI "\-\^P " "{fix|ignore}"
+Fix (or ignore) `corrupt' partition tables, i.e., partition tables
+with linear and sector/head/cylinder addresses that do not correspond.
+.TP
+.BI "\-\^s " save-file
+When
+.B lilo
+overwrites the boot sector, it preserves the old contents in
+a file, by default
+.I /boot/boot.NNNN
+where NNNN depends on the device. This option specifies an
+alternate save file for the boot sector. (Or, together with the
+\fB-u\fP option, specifies from where to restore the boot sector.)
+.TP
+.BI "\-\^S " save-file
+Normally,
+.B lilo
+will not overwrite an existing save file. This options says
+that overwriting is allowed.
+.TP
+.BI "\-\^u " device-name
+Uninstall
+.BR lilo ,
+by copying the saved boot sector back. A time-stamp is checked.
+.TP
+.BI "\-\^U " device-name
+Idem, but do not check the time-stamp.
+.TP
+.BI "\-\^R " "command line"
+This option sets the default command for the boot loader the next
+time it executes. The boot loader will then erase this line: this
+is a once-only command. It is typically used in reboot scripts,
+just before calling `shutdown -r'.
+.TP
+.BI "\-\^I " "label"
+The label of the running kernel can be found in the environment
+variable BOOT_IMAGE after startup. This command will print the
+corresponding path name on stdout.
+.TP
+.B "\-\^V"
+Print version number.
+
+.LP
+The above command line options correspond to the key words
+in the config file indicated below.
+.IP
+.TS
+l l.
+-b bootdev	boot=bootdev
+-c	compact
+-d dsec	delay=dsec
+-D label	default=label
+-i bootsector	install=bootsector
+-f file	disktab=file
+-l	linear
+-L	lba32
+-m mapfile	map=mapfile
+-P fix	fix-table
+-P ignore	ignore-table
+-s file	backup=file
+-S file	force-backup=file
+-v	verbose=level
+.TE
+.SH "SEE ALSO"
+lilo.conf(5).
+.br
+The lilo distribution comes with very extensive documentation.
+.SH "AUTHOR"
+Werner Almesberger (almesber@bernina.ethz.ch).
+.br
+John Coffman (johninsd@san.rr.com) (lba32 extensions).

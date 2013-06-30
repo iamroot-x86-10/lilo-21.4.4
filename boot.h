@@ -1,0 +1,35 @@
+/* boot.h  -  Boot image composition */
+
+/* Copyright 1992-1995 Werner Almesberger. See file COPYING for details. */
+
+
+#ifndef BOOT_H
+#define BOOT_H
+
+#include "lilo.h"
+
+
+void boot_image(char *spec,IMAGE_DESCR *descr);
+
+/* Maps a "classic" boot image. */
+
+void boot_device(char *spec,char *range,IMAGE_DESCR *descr);
+
+/* Maps sectors from a device as the boot image. Can be used to boot raw-written
+   disks. */
+
+void boot_unstripped(char *boot,char *setup,char *kernel,IMAGE_DESCR *descr);
+
+/* Maps an unstripped kernel image as the boot image. The setup (without the
+   header) is prepended. */
+
+void boot_other(char *loader,char *boot,char *part,IMAGE_DESCR *descr);
+
+/* Merges a loader with a partition table and appends a boot sector. This mix
+   is used to boot non-Linux systems. */
+
+void dump(char *spec,IMAGE_DESCR *descr);
+
+/* Maps a crash dump file. */
+
+#endif

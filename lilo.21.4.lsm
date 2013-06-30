@@ -1,0 +1,22 @@
+Begin3
+Title:		LILO
+Version:	21.4-4
+Entered-date:	10Jun00
+Description:	Generic boot loader for Linux. Distribution includes full
+		source, documentation and support files, but no pre-compiled
+		binaries.
+Keywords:	Linux, boot loader
+Author:		Werner Almesberger <Werner.Almesberger@epfl.ch>
+		John Coffman <johninsd@san.rr.com> (lba32 extensions)
+Maintained-by:	Werner Almesberger <Werner.Almesberger@epfl.ch>
+                John Coffman <johninsd@san.rr.com> (lba32 extensions)
+Primary-site:	sd.dynhost.com /pub/linux/lilo
+		202kB lilo-21.4.4.tar.gz
+Alternate-site:	metalab.unc.edu /pub/Linux/system/boot/lilo
+                brun.dyndns.org /pub/linux/lilo  (alias for primary site)
+Platforms:	Linux 0.99pl12 or newer, gcc and as86 needed to compile.
+                NetAssembler (nasm) 0.98 required to make disk utility.
+		LaTeX and (optionally) Perl and Transfig needed to print the
+		documentation.
+Copying-policy:	BSD-like
+End

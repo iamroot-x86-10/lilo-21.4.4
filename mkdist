@@ -1,0 +1,30 @@
+#!/bin/sh
+MINOR=`grep VERSION_MINOR <version.h | sed -e "s/.*VERSION_MINOR *//" `
+MAJOR=`grep VERSION_MAJOR <version.h | sed -e "s/.*VERSION_MAJOR *//" `
+VERSION=$(echo $MAJOR.$MINOR)
+#VERSNUM=`sed 's/\([0-9]\)[^0-9]*/\1/' V`
+#DISTDIR=/brun/ftp/pub/linux/lilo
+DISTDIR=.
+D1=$(pwd)
+echo VERSION = $VERSION
+#echo VERSNUM = $VERSNUM
+rm -f lilo.lsm
+ln -s lilo-$VERSION.lsm lilo.lsm
+
+cd ..
+D2=$(pwd)
+DIR=`echo $D1 | sed -e "s~$D2/~~" `
+#DIR=lilo
+
+tar cvf - \
+  $DIR/README* $DIR/INCOMPAT $DIR/CHANGES $DIR/COPYING \
+  $DIR/QuickInst $DIR/lilo*.lsm \
+  $DIR/disk* $DIR/*.conf \
+  $DIR/Makefile $DIR/*.h $DIR/*.c $DIR/*.S \
+  $DIR/mkdist $DIR/check-config.cpp $DIR/keytab-lilo.pl \
+  $DIR/manPages/lilo.8 $DIR/manPages/lilo.conf.5 \
+  $DIR/doc/README \
+  $DIR/doc/Makefile $DIR/doc/*.tex $DIR/doc/*.fig \
+  $DIR/doc/fullpage.sty $DIR/doc/rlatex $DIR/doc/t2a.pl |
+  gzip -9 >$DISTDIR/lilo-$VERSION.tar.gz
+cp -fdvp $DIR/*.lsm $DISTDIR

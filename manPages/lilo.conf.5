@@ -1,0 +1,419 @@
+.\" @(#)lilo.conf.5 1.0 950728 aeb
+.\" This page is based on the lilo docs, which carry the following
+.\" COPYING condition:
+.\"
+.\" LILO program code, documentation and auxiliary programs are
+.\" Copyright 1992-1994 Werner Almesberger.
+.\" All rights reserved.
+.\" 
+.\" Redistribution and use in source and binary forms of parts of or the
+.\" whole original or derived work are permitted provided that the
+.\" original work is properly attributed to the author. The name of the
+.\" author may not be used to endorse or promote products derived from
+.\" this software without specific prior written permission. This work
+.\" is provided "as is" and without any express or implied warranties.
+.\"
+.TH LILO.CONF 5 "20 March 2000"
+.SH NAME
+lilo.conf \- configuration file for lilo
+.SH DESCRIPTION
+.LP
+This file, by default
+.IR /etc/lilo.conf ,
+is read by the boot loader installer lilo (see lilo(8)).
+.LP
+It might look as follows:
+.IP
+.nf
+boot = /dev/hda
+delay = 40
+compact
+vga = normal
+root = /dev/hda1
+read-only
+image = /zImage-2.5.99
+        label = try
+image = /zImage-1.0.9
+        label = 1.0.9
+image = /tamu/vmlinuz
+	label = tamu
+	root = /dev/hdb2
+	vga = ask
+other = /dev/hda3
+	label = dos
+	table = /dev/hda
+.fi
+.LP
+This configuration file specifies that lilo uses the Master
+Boot Record on /dev/hda. (For a discussion of the various ways
+to use lilo, and the interaction with other operating systems,
+see user.tex from the lilo documentation.)
+.LP
+When booting, the boot loader will wait four seconds (40 deciseconds)
+for you to press Shift.
+If you don't, then the first kernel image mentioned (/zImage-1.5.99,
+that you probably installed just five minutes ago) will be booted.
+If you do, the boot loader will ask you which image to boot.
+In case you forgot the possible choices, press [TAB] (or [?], if
+you have a US keyboard), and you will be presented with a menu.
+You now have the choice of booting this brandnew kernel,
+or an old trusted kernel, or a kernel on another root file system
+(just in case you did something stupid on your usual rootfs),
+or booting a different operating system.
+There can be up to 16 images mentioned in lilo.conf.
+.LP
+As can be seen above, a configuration file starts with a number
+of global options (the top 6 lines in the example),
+followed by descriptions of the options for the various images.
+An option in an image description will override a global option.
+
+.SH "GLOBAL OPTIONS"
+There are many possible keywords. The description below is
+almost literally from user.tex (just slightly abbreviated).
+.TP
+.BI "backup=" backup-file
+Copy the original boot sector to
+.I backup-file
+(which may also be a device, e.g.
+.IR /dev/null )
+instead of
+.IR /boot/boot.NNNN .
+.TP
+.BI "boot=" boot-device
+Sets the name of the device (e.g. a hard disk partition) that contains
+the boot sector. If this keyword is omitted, the boot sector is read
+from (and possibly written to) the device that is currently mounted as root.
+.TP
+.BI "change-rules"
+Defines boot-time changes to partition type numbers (`hiding').
+See section "Partition type change rules" of user.tex for details.
+.TP
+.BI "compact"
+Tries to merge read requests for adjacent sectors into a single 
+read request. This drastically reduces load time and keeps the map 
+smaller. Using `compact' is especially recommended when booting from a 
+floppy disk. 
+.TP
+.BI "default=" name
+Uses the specified image as the default boot image. If `default' is omitted,
+the image appearing first in the configuration file is used.
+.TP
+.BI "delay=" tsecs
+Specifies the number of tenths of a second the boot loader should 
+wait before booting the first image. This is useful on systems that 
+immediately boot from the hard disk after enabling the keyboard.
+The boot loader doesn't wait if `delay' is omitted or is set to zero.
+.TP
+.BI "disk=" device-name
+Defines non-standard parameters for the specified disk.
+See section "Disk geometry" of user.tex for details.
+Especially useful is the `bios=' parameter.
+The BIOS numbers your disks 0x80, 0x81, etc. and it is impossible
+to decide which Linux disk corresponds to which BIOS disk
+(since this depends on the BIOS setup, and on the type of BIOS),
+so if you have an unusual setup you need to state the correspondence
+between Linux disks and BIOS disks.
+For example,
+.sp
+.nf
+    disk=/dev/sda
+            bios=0x80
+    disk=/dev/hda
+            bios=0x81
+.fi
+.sp
+would say that your SCSI disk is the first BIOS disk,
+and your (primary master) IDE disk is the second BIOS disk.
+.TP
+.BI "disktab=" disktab-file
+Specifies the name of the disk parameter table.
+The map installer looks for
+.I /etc/disktab
+if `disktab' is omitted. The use of disktabs is discouraged.
+.TP
+.BI "fix-table"
+This allows lilo to adjust 3D addresses in partition tables. Each 
+partition entry contains a 3D (sector/head/cylinder) and a linear 
+address of the first and the last sector of the partition. If a 
+partition is not track-aligned and if certain other operating systems 
+(e.g. PC/MS-DOS or OS/2) are using the same disk, they may change the 
+3D address. lilo can store its boot sector only on partitions where 
+both address types correspond. lilo re-adjusts incorrect 3D start 
+addresses if `fix-table' is set.
+
+WARNING: This does not guarantee that other operating systems may 
+not attempt to reset the address later. It is also possible that this 
+change has other, unexpected side-effects. The correct fix is to 
+re-partition the drive with a program that does align partitions to 
+tracks. Also, with some disks (e.g. some large EIDE disks with address 
+translation enabled), under some circumstances, it may even be 
+unavoidable to have conflicting partition table entries.
+.TP
+.BI "force-backup=" backup-file
+Like `backup', but overwrite an old backup copy if it exists.
+.TP
+.BI "ignore-table"
+tells lilo to ignore corrupt partition tables. 
+.TP
+.BI "install=" boot-sector
+Install the specified file as the new boot sector. 
+If `install' is omitted,
+.I /boot/boot.b
+is used as the default. 
+.TP
+.BI "linear"
+Generate linear sector addresses instead of sector/head/cylinder 
+addresses. Linear addresses are translated at run time and do not 
+depend on disk geometry. Note that boot disks may not be portable
+if `linear' is used, because the BIOS service to determine the disk geometry 
+does not work reliably for floppy disks. When using `linear' with large 
+disks,
+.I /sbin/lilo
+may generate references to inaccessible disk areas,
+because 3D sector addresses are not known before boot time.
+.TP
+.BI "lba32"
+Generate 32-bit Logical Block Addresses instead of sector/head/cylinder 
+addresses. If the BIOS supports packet addressing, then packet calls will be
+used to access the disk. This allows booting from any partition on disks
+greater than 8.4Gb, the translated geometry limit for C:H:S addressing. If
+the BIOS does not support packet addressing, then 'lba32' addresses are
+translated to C:H:S, just as for 'linear'. Using 'lba32', all floppy disk
+references are retained in C:H:S form.
+.TP
+.BI "lock"
+Enables automatic recording of boot command lines as the defaults 
+for the following boots. This way, lilo "locks" on a choice until it is 
+manually overridden.
+.TP
+.BI "map=" map-file
+Specifies the location of the map file. If `map' is omitted, the file
+.I /boot/map
+is used. 
+.TP
+.BI "message=" message-file
+specifies a file containing a message that is displayed before
+the boot prompt. No message is displayed while waiting 
+for a shifting key after printing "LILO ". In the message, the FF
+character ([Ctrl L]) clears the local screen. The size of the message 
+file is limited to 65535 bytes. The map file has to be rebuilt if the 
+message file is changed or moved.
+.TP
+.BI "nowarn"
+Disables warnings about possible future dangers.
+.TP
+.BI "optional"
+The per-image option `optional' (see below) applies to all images.
+.TP
+.BI "password=" password
+The per-image option `password=...' (see below) applies to all images.
+.TP
+.BI "prompt"
+forces entering the boot prompt without expecting any prior 
+key-presses. Unattended reboots are impossible if `prompt' is set
+and `timeout' isn't.
+.TP
+.BI "restricted"
+The per-image option `restricted' (see below) applies to all images.
+.TP
+.BI "serial=" parameters
+enables control from a serial line. The specified serial port is
+initialized and the boot loader is accepting input from it and from 
+the PC's keyboard. Sending a break on the serial line corresponds to 
+pressing a shift key on the console in order to get the boot loader's
+attention. 
+All boot images should be password-protected if the serial access is 
+less secure than access to the console, e.g. if the line is connected 
+to a modem. The parameter string has the following syntax:
+.sp
+.nf
+    <port>[,<bps>[<parity>[<bits>]]]
+.fi
+.sp
+<port>:  the number of the serial port, zero-based. 0 corresponds to
+COM1 alias /dev/ttyS0, etc. All four ports can be used (if present).
+.sp
+<bps>:  the baud rate of the serial port. The following baud rates are 
+supported: 110, 150, 300, 600, 1200, 2400, 4800 and 9600 bps. 
+Default is 2400 bps.
+.sp
+<parity>:  the parity used on the serial line. The boot loader ignores input 
+parity and strips the 8th bit. The following (upper or lower case) 
+characters are used to describe the parity:  n  for no parity,  e  
+for even parity and  o  for odd parity.
+.sp
+<bits>:  the number of bits in a character. Only 7 and 8 bits are 
+supported. Default is 8 if parity is "none", 7 if parity is "even" 
+or "odd". 
+.sp
+If `serial' is set, the value of `delay' is automatically raised to 20.
+.sp
+Example: serial=0,2400n8 initializes COM1 with the default parameters.
+.TP
+.BI "timeout=" tsecs
+sets a timeout (in tenths of a second) for keyboard 
+input. If no key is pressed for the specified time, the first image is 
+automatically booted. Similarly, password input is aborted if the user 
+is idle for too long. The default timeout is infinite.
+.TP
+.BI "verbose=" level
+Turns on lots of progress reporting. Higher numbers give more verbose
+output. If  \-v  is additionally specified on the lilo command line,
+the level is increased accordingly. The maximum verbosity level is 5.
+
+.LP
+Additionally, the kernel configuration parameters
+.BR append ", " ramdisk ", " read-only ", " read-write ", " root
+and
+.B vga
+can be set in the global options section. They are used as defaults
+if they aren't specified in the configuration sections of the
+respective kernel images.
+
+.SH "PER-IMAGE SECTION"
+A per-image section starts with either a line
+.sp
+.nf
+    \fBimage=\fP\fIpathname\fP
+.fi
+.sp
+(to indicate a file or device containing the boot image of a Linux
+kernel), or a line
+.sp
+.nf
+    \fBother=\fP\fIpathname\fP
+.fi
+.sp
+to indicate an arbitrary system to boot.
+.LP
+
+In the former case, if an \fBimage\fP line specifies booting
+from a device, then one has to indicate the range of sectors to be mapped
+using
+.TP
+.BI "range=" start-end
+.LP
+
+In the latter case (booting another system) there are the three options
+.TP
+.BI "loader=" chain-loader
+This specifies the chain loader that should be used.
+By default
+.I /boot/chain.b
+is used. The chain loader must be specified if booting from a device
+other than the first hard or floppy disk.
+.TP
+.BI "table=" device
+This specifies the device that contains the partition table. 
+The boot loader will not pass partition information to the booted
+operating system if this variable is omitted. (Some operating systems
+have other means to determine from which partition they have been booted.
+E.g., MS-DOS usually stores the geometry of the boot disk or partition
+in its boot sector.)
+Note that /sbin/lilo must be re-run if a partition table mapped referenced
+with `table' is modified.
+.TP
+.BI "unsafe"
+Do not access the boot sector at map creation time. This disables 
+some sanity checks, including a partition table check. If the boot 
+sector is on a fixed-format floppy disk device, using UNSAFE avoids the 
+need to put a readable disk into the drive when running the map 
+installer. `unsafe' and `table' are mutually incompatible. 
+.LP
+
+In both cases the following options apply.
+.TP
+.BI "label=" name
+The boot loader uses the main file name (without its path)
+of each image specification to identify that image.
+A different name can be used by setting the variable `label'.
+.TP
+.BI "alias=" name
+A second name for the same entry can be used by specifying an alias.
+.TP
+.BI "lock"
+(See above.)
+.TP
+.BI "optional"
+Omit the image if it is not available at map creation time.
+This is useful to specify test kernels that are not always present.
+.TP
+.BI "password=" password
+Protect the image by a password.
+.TP
+.BI "restricted"
+A password is only required to boot the image if parameters
+are specified on the command line (e.g. single).
+.LP
+
+.SH "KERNEL OPTIONS"
+If the booted image is a Linux kernel, then one may pass
+command line parameters to this kernel.
+.TP
+.BI "append=" string
+Appends the options specified to the parameter line passed to the kernel.
+This is typically used to specify parameters of hardware that can't be
+entirely auto-detected or for which probing may be dangerous. Example:
+.sp
+.nf
+     append = "hd=64,32,202"
+.fi
+.sp
+.TP
+.BI "literal=" string
+Like `append', but removes all other options (e.g. setting of the root
+device). Because vital options can be removed unintentionally with `literal',
+this option cannot be set in the global options section.
+.TP
+.BI "ramdisk=" size
+This specifies the size of the optional RAM disk. A value of 
+zero indicates that no RAM disk should be created. If this variable is 
+omitted, the RAM disk size configured into the boot image is used.
+.TP
+.BI "read-only"
+This specifies that the root file system should be mounted read-only.
+Typically, the system startup procedure re-mounts the root 
+file system read-write later (e.g. after fsck'ing it).
+.TP
+.BI "read-write"
+This specifies that the root file system should be mounted read-write.
+.TP
+.BI "root=" root-device
+This specifies the device that should be mounted as root. 
+If the special name
+.B current
+is used, the root device is set to the device on which the root file
+system is currently mounted. If the root has been changed with  -r ,
+the respective device is used. If the variable `root' is omitted,
+the root device setting contained in the kernel image is used.
+(And that is set at compile time using the ROOT_DEV variable in
+the kernel Makefile, and can later be changed with the rdev(8) program.)
+.TP
+.BI "vga=" mode
+This specifies the VGA text mode that should be selected when 
+booting. The following values are recognized (case is ignored): 
+.sp
+.BR normal :
+select normal 80x25 text mode. 
+.sp
+.BR extended " (or " ext ):
+select 80x50 text mode.
+.sp
+.BR ask :
+stop and ask for user input (at boot time).
+.sp
+<number>:  use the corresponding text mode. A list of available modes 
+can be obtained by booting with  vga=ask  and pressing [Enter]. 
+.sp
+If this variable is omitted, the VGA mode setting contained in the 
+kernel image is used. (And that is set at compile time using the
+SVGA_MODE variable in the kernel Makefile, and can later be changed with
+the rdev(8) program.)
+
+
+
+.SH "SEE ALSO"
+lilo(8), rdev(8).
+.br
+The lilo distribution comes with very extensive documentation
+of which the above is an extract.
