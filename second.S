@@ -33,8 +33,9 @@ version:.word	VERSION
 
 	.org	CODE_START_2
 
-start:	seg	ss		! use a COM port ?
-	mov	dx,DSC_OFF-6+SSDIFF
+start:	seg	ss		! use a COM port ?				
+													!!DSC_OFF == BOOT_PARAMS_1->descr
+	mov	dx,DSC_OFF-6+SSDIFF							!!BOOT_PARMAS_1->port의 값을 가져온다.
 	sub	dl,#1
 	jc	nocom		! no -> go on
 	xor	ax,ax		! initialize the serial port
