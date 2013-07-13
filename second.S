@@ -33,10 +33,12 @@ version:.word	VERSION
 
 	.org	CODE_START_2
 
-start:	seg	ss		! use a COM port ?				
-													!!DSC_OFF == BOOT_PARAMS_1->descr
-	mov	dx,DSC_OFF-6+SSDIFF							!!BOOT_PARMAS_1->port의 값을 가져온다.
-	sub	dl,#1
+start:	seg	ss		! use a COM port ?	!! ss = 0x9000	
+								!! 0x9A0000 - 6 + DSC_OFF
+								!!DSC_OFF == BOOT_PARAMS_1->descr
+	mov	dx,DSC_OFF-6+SSDIFF		!!BOOT_PARMAS_1->port의 값을 가져온다.
+	sub	dl,#1					!!dl이 1이면 시리얼포트 1을 사용하겠다.
+								!!dl이 0이면 시리얼포트를 사용하지않겠다.
 	jc	nocom		! no -> go on
 	xor	ax,ax		! initialize the serial port
 	xchg	al,dh
@@ -101,62 +103,68 @@ nocom:
 	mov	cx,#32		! drain type-ahead buffer ?
 drkbd:	mov	ah,#1		! is a key pressed ?
 	int	0x16
-	jz	comcom		! no -> done
+	jz	comcom		! no -> done !! 키보드 버퍼가 다 비워졌다.
 	xor	ah,ah		! get the key
-	int	0x16
-	loop	drkbd
+	int	0x16					 !! 아무것도 안하니깐 결국 비워지는 효과
+	loop	drkbd				 !! cx 에 설정된 값만큼 루프를 돈다.
 #endif
 
-comcom:	mov	al,#0x4c	! display an 'L'
+comcom:	mov	al,#0x4c	! display an 'L' LIL
 	call	display
 	xor	ax,ax		! get pointer to disk parameter table in DS:SI
 	mov	ds,ax
-	lds	si,0x78
+	lds	si,0x78		!! 0x0000:0x78 에 있는 값이 DS:SI에 설정이 된다. 
+					!! DS:SI의 값이 0xF000:0xEFC7
+					!! 0x1e 인터럼트 참조
+
+					!! Disk Initialization Parameter Table Vector를
+					!! 수정하는 작업
 #ifndef LCF_XL_SECS
-	cmp	byte ptr (si+4),#9 ! okay ?
-	ja	dskok		! yes -> do not patch
+	cmp	byte ptr (si+4),#9 ! okay ?  		!!last sector on track 과 9를 비교한다.
+	ja	dskok		! yes -> do not patch 	!! 9보다 크면 dskok로 가라.
 #endif
 	push	cs		! get pointer to new area in ES:DI
-	pop	es
-	mov	di,#dskprm
+	pop	es			!! CS에 있는 값을 ES로 넣는다.
+	mov	di,#dskprm	!! dskprm(12bytes)의 위치를 di에 저장
 	mov	cx,#6		! copy 12 bytes
 	rep
-	movsw
-	seg	es		! patch number of sectors
+	movsw			!! DS:SI를 ES:DI로 mov
+	seg	es		! patch number of sectors !! 포인터를 dskprm으로 지정한다.
 #ifndef LCF_XL_SECS
-	mov	byte ptr (di-8),#18
+	mov	byte ptr (di-8),#18		!! last sector on track의 값을 18로 바꾼다.
 #else
 	mov	byte ptr (di-8),#LCF_XL_SECS
 #endif
-	cli			! paranoia
+	cli			! paranoia		
 	xor	ax,ax		! store new pointer
 	mov	ds,ax
-	mov	0x78,#dskprm
-	mov	0x7a,es
+	mov	0x78,#dskprm	!!기존의 disk parameter vector table의 위치를
+						!!우리의 0x9B00:#dskprm로 바꾼다.
+	mov	0x7a,es			!!여기까지.
 	sti
 dskok:	seg	cs		! clear the break flag
-	mov	byte ptr break,#0
+	mov	byte ptr break,#0	!! break에 0을 저장.
 	call	instto		! get timer interrupt
 	jmp	restrt		! get going
 
 ! Die
 
-crshbrn:mov	al,#63		! display a question mark
+crshbrn:mov	al,#63		! display a question mark 
 	call	display
 zzz:	jmp	zzz		! sit here forever
 
 ! Restart here after a boot error
 
 restrt: mov	ax,cs		! adjust segment registers
-	mov	ds,ax
+	mov	ds,ax			
 	mov	es,ax
 ;;;	cli			! reset SP (we might have restarted with some
 	mov	sp,#STACK	! data on the stack)
 ;;;	sti
-	cmp	sig,#0x494c	! check that this is really loaded at the
+	cmp	sig,#0x494c	! check that this is really loaded at the !!0x494C == 'LI'
 				! right place ...
 	jne	crshbrn
-	cmp	sig+2,#0x4f4c
+	cmp	sig+2,#0x4f4c !!0x4f4c == 'LO'
 	jne	crshbrn
 	cmp	stage,#STAGE_SECOND
 	jne	crshbrn
@@ -172,7 +180,7 @@ ldsc:
 	mov	dx,DSC_OFF+2+SSDIFF
         seg     ss
 	mov	al,DSC_OFF+4+SSDIFF     ;;;
-	call	cread
+	call	cread			!!0x9200:0x2200에 저장
 	jc	fdnok		! error -> retry
 ;;;	mov	al,#1		! load the second sector
 	mov	bx,#DESCR+512
@@ -183,39 +191,39 @@ ldsc:
         seg     ss                      ;;;
 	mov	al,DSC_OFF2+4+SSDIFF    ;;;
 	call	cread
-	jc	fdnok		! error -> retry
+	jc	fdnok		! error -> retry !! BOOT_PARAMS_1->descr[0~1]을 메모리로 load하는것을 완료
 	mov	si,#DESCR	! compute a checksum of the descriptor table
 	mov	bx,#INIT_CKS
 	cld
 	mov	cx,#0x200
-csloop:	lodsw
+csloop:	lodsw		!! DS:SI의 값을 AX에 저장
 	xor	bx,ax
-	loop	csloop
+	loop	csloop	!! 2개의 섹터 1024bytes 만큼 체크섬 검사
 	or	bx,bx		! okay ?
-	jnz	chkerr
+	jnz	chkerr		!! 체크섬 검사 완료
 	seg	ss		! load the keyboard translation table
-	mov	cx,MSG_OFF+SSDIFF+7
+	mov	cx,MSG_OFF+SSDIFF+7		!! 0x9000:0xA000 + MSG_OFF + 7 = BOOT_PARMS_1->keytab
 	seg	ss
-	mov	dx,MSG_OFF+SSDIFF+9
+	mov	dx,MSG_OFF+SSDIFF+9		!!
         seg     ss                      ;;;
-	mov	al,MSG_OFF+SSDIFF+11    ;;;
-	mov	bx,#KEYTABLE
+	mov	al,MSG_OFF+SSDIFF+11    ;;; !! 
+	mov	bx,#KEYTABLE				!! 섹터정보를 읽을 위치를 지정
 ;;;	mov	al,#1
 	call	cread
 	jc	fdnok
 ;;;	mov	al,#1		! load the default command line
 	mov	bx,#DFLCMD
 	seg	ss
-	mov	cx,DFCMD_OFF+SSDIFF
+	mov	cx,DFCMD_OFF+SSDIFF		!! BOOT_PARAMS_1->descr[2]의 값을 가져온다.
 	seg	ss
 	mov	dx,DFCMD_OFF+2+SSDIFF
 	seg	ss                      ;;;
 	mov	al,DFCMD_OFF+4+SSDIFF   ;;;
 	call	cread
-	jc	fdnok		! error -> retry
+	jc	fdnok		! error -> retry !! load default command line완료
 	mov	bx,#DFLCMD
 	cmp	word ptr (bx),#DC_MAGIC ! okay ?
-	jne	bdcmag		! no -> do not write
+	jne	bdcmag		! no -> do not write 
 #ifndef LCF_READONLY
 	mov	word ptr (bx),#DC_MGOFF ! erase the magic number
 ;;;	mov	al,#1
@@ -236,7 +244,7 @@ fdnok:
 	mov	dl,al
 	int	0x13
 #endif
-	br	ldsc		! retry
+	br	ldsc		! retry !! br = jmp
 
 ! Checksum error
 
@@ -281,17 +289,17 @@ atbol:	br	iloop		! done
 ! Ready to process user input
 
 dokay:	mov	bx,#ospc	! display 'O '
-	call	say
-	mov	ospc,#0		! disable the message
-	mov	word ptr vgaovr,#VGA_NOCOVR ! disable VGA override
+	call	say			!! say는 스트링을 출력하는 함수
+	mov	ospc,#0		! disable the message !! 주소는 그냥 넣어주고, 변수는 ptr을 사용하여 값을 저장한다.
+	mov	word ptr vgaovr,#VGA_NOCOVR ! disable VGA override !!ptr은 C의 강제형변환과 같지않을까?
 	mov	word ptr memlim,#0 ! no memory limit
 	xor	ax,ax		! get the delay and disable further delays
 	seg	ss
-	xchg	ax,DSC_OFF-8+SSDIFF
-	or	old_del,ax	! remember delay
+	xchg	ax,DSC_OFF-8+SSDIFF		!! ax에는 BOOT_PARAMS_1->delay값이 저장되고 delay에는 0으로 저장
+	or	old_del,ax	! remember delay!! old_del에 delay값을 저장한다.
 	mov	nodfl,#iloop	! interactive prompt if falling through
 	seg	ss		! enter boot prompt ?
-	cmp	byte ptr DSC_OFF+15+SSDIFF,#0
+	cmp	byte ptr DSC_OFF+15+SSDIFF,#0 !! BOOT_PARAMS_1->prompt 0과 비교한다.
 	jne	extp		! yes -> check for external parameters
 	mov	nodfl,#bfirst	! boot first image if falling through
 	call	waitsh		! wait for a shifting key
@@ -300,20 +308,20 @@ dokay:	mov	bx,#ospc	! display 'O '
 ! Check for external parameters
 
 extp:	seg	ss		! external parameters ?
-	cmp	byte ptr EX_OFF+6,#EX_DL_MAG
+	cmp	byte ptr EX_OFF+6,#EX_DL_MAG !! 0x9000:0xA000 + CODE_START_1 + 6 즉,ext_dl값과 0xFE 를 비교한다. 
 	jne	noex		! no -> go on
 	seg	ss		! clear flag
-	mov	byte ptr EX_OFF+6,#0
+	mov	byte ptr EX_OFF+6,#0		 !! ext_dl값에 0을 저장한다.
 	seg	ss		! load the signature pointer
-	les	bx,EX_OFF
-	seg	es		! "LI" ?
+	les	bx,EX_OFF					 !! ss:EX_OFF의 주소값을 es:bx에 저장한다.
+	seg	es		! "LI" ?			 !! 
 	cmp	(bx),#EX_MAG_L
 	jne	noex		! no -> go on
 	seg	es		! "LO" ?
 	cmp	(bx+2),#EX_MAG_H
 	jne	noex		! no -> go on
 	seg	ss
-	mov	si,EX_OFF+4	! pointer to the command line
+	mov	si,EX_OFF+4	! pointer to the command line !!ext_bx값을  si에 저장한다.
 	seg	es
 	cmp	byte ptr (si),#0 ! empty ?
 	je	iloop		! yes -> enter interactive mode
@@ -1339,20 +1347,20 @@ acnosp:	test	byte ptr timeout,#1 ! timed out ?
 shpress:stc			! set carry
 	ret			! done
 
-! Timeout handling
-
+! Timeout handling 0x1C 핸들러를 등록한다.
+!! Time interrupt 
 instto:	push	ds		! install the timeout handler
 	xor	ax,ax
 	mov	ds,ax
 	cli			! no interrupts
-	mov	ax,[0x1c*4]	! get the old vector
+	mov	ax,[0x1c*4]	! get the old vector 
+	seg	cs				!!
+	mov	int1c_l,ax		!! 0x1C의 old vector 를 저장
+	mov	ax,[0x1c*4+2]	
 	seg	cs
-	mov	int1c_l,ax
-	mov	ax,[0x1c*4+2]
-	seg	cs
-	mov	int1c_h,ax
+	mov	int1c_h,ax		!! 여기까지 
 	mov	[0x1c*4],#tick	! install new vector
-	mov	[0x1c*4+2],cs
+	mov	[0x1c*4+2],cs	
 	sti			! done
 	pop	ds
 	ret
@@ -1383,12 +1391,13 @@ setto:	or	ax,ax		! time out immediately ?
 toimmed:mov	byte ptr timeout,#0xff ! set the timed-out flag
 	ret			! done
 
-tick:	pushf			! save flags
+tick:	pushf			! save flags	!!현재 플레그값들을 스택에 모두 저장
 	seg	cs		! no timeout ?
-	cmp	cntdown,#0xffff
-	je	notzro		! yes -> go on
+	cmp	cntdown,#0xffff					!!cntdown을 0xFFFF로 설정하면 우리꺼 안함
+	je	notzro		! yes -> go on		!! 같으면 notzro로 간다
 	seg	cs		! decrement counter
-	dec	cntdown
+	dec	cntdown							!!contdown을 감소하다가 0이되면
+										!!timeout에 0xFF를 저장
 	jnz	notzro		! not zero -> go on
 	seg	cs		! set timeout flag
 	mov	byte ptr timeout,#0xff
@@ -1435,7 +1444,7 @@ cread:
 
         push    ax              ;save the count
 	mov	ah,#2		;read command
-        call    dsk_do_rw       ; int 0x13 with retries
+        call    dsk_do_rw       ; int 0x13 with retries	!! 복습하면서 찾아보기
         pop     cx              ;Carry Set means error on read
         mov     al,cl           ;count in AL, error code in AH
         ret
@@ -1796,7 +1805,7 @@ ospc:	.ascii	"O"
 #ifdef LCF_BEEP
 	.byte	7
 #endif
-	.byte	32,0
+	.byte	32,0		
 
 crlf:	.byte	10,0
 

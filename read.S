@@ -234,11 +234,11 @@ dsk_do_rw:
 #endif
 
 dsk_do_int13:
-                push    bp
+                push    bp				!! sp의 백업레지스터
                 mov     bp,#5           ;number of tries
-dsk_do_int13a:  pusha
+dsk_do_int13a:  pusha					!!
                 int     0x13
-                jnc     dsk_io_exit
+                jnc     dsk_io_exit		!!성공하면 dsk_io_exit로 가자
                 dec     bp              ;does not affect the carry
                 jz      dsk_io_exit
                 xor     ax,ax           ;reset disk controllers
@@ -246,7 +246,9 @@ dsk_do_int13a:  pusha
                 popa
                 dec     bp
                 jmp     dsk_do_int13a
-
+										!! 함수 호출 결과값을 가져가기위해
+										!! popa를 사용하지 않고
+										!! 스택포인터를 조절하여 pop처럼 행동하였다.
 dsk_io_exit:    mov     bp,sp           ;do not touch any flags
                 lea     sp,(bp+16)      ;an ADD would touch flags
                 pop     bp              ;do not touch any flags

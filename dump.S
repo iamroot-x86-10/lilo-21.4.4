@@ -82,7 +82,7 @@ bout:	push	ax		! display one byte
 	call	nout
 	pop	ax
 nout:	and	al,#15		! display one nibble
-	add	al,#48
+	add	al,#48	
 	cmp	al,#58
 	jb	nokay
 	add	al,#7
