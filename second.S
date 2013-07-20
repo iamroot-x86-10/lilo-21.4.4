@@ -26,7 +26,12 @@ _main:	jmp	start
 	.org	6
 
 ! Boot device parameters. They are set by the installer.
-
+! typedef struct {
+!     char jump[6]; /* jump over the data */
+!     char signature[4]; /* "LILO" */
+!     unsigned short stage,version;
+! } BOOT_PARAMS_2; /* second stage boot loader */
+! BOOT_PARANS_2의 값들을 저장한다.
 sig:	.ascii	"LILO"
 stage:	.word	STAGE_SECOND
 version:.word	VERSION
@@ -99,39 +104,71 @@ drain:	in	al,dx
 	jmp	comcom		! proceed with the rest of "LILO"
 
 nocom:
-#ifndef LCF_NODRAIN
-	mov	cx,#32		! drain type-ahead buffer ?
+#ifndef LCF_NODRAIN								!! 왜 32번의 루프를 도는 것일까?
+	mov	cx,#32		! drain type-ahead buffer ? !! 바이오스 영역에 있는 키보드 원형 큐 버퍼가 32byte 이지만
+												!! 아스키/스캔코드로 한번 누르면 2바이트씩 증가한다.
+												!! 실제 인터럽트 16h를 사용해서 비워보면 키버퍼의 최대개수는 15개 
+												!! head, tail의 키가 같으면 비어있는 의미이다. 
+												!! 16번만 돌면 충분히 다비워지는데 32번을 도는 이유는
+												!! 0x480,0x482를 이용하여 키보드 버퍼를 줄이거나 늘릴수 있다.
+												!! 그래서 넉넉하게 32번으로 잡아놓은거 같다.
 drkbd:	mov	ah,#1		! is a key pressed ?
-	int	0x16
-	jz	comcom		! no -> done !! 키보드 버퍼가 다 비워졌다.
-	xor	ah,ah		! get the key
-	int	0x16					 !! 아무것도 안하니깐 결국 비워지는 효과
-	loop	drkbd				 !! cx 에 설정된 값만큼 루프를 돈다.
+	int	0x16									!! 0x16-1 인터럽트는 Z플레그에 키값이 있으면 0, 그렇지 않으면 1을
+												!! 설정한다.	
+	jz	comcom		! no -> done 				!! 키보드 버퍼가 다 비워졌다.
+	xor	ah,ah		! get the key				!! 0x16-0 인터럽트를 이용하여 아스키/스켄코드로 2byte를 읽어온다.
+	int	0x16					 				!! 아무것도 안하니깐 결국 비워지는 효과
+	loop	drkbd				 				!! cx 에 설정된 값만큼 루프를 돈다.
 #endif
 
 comcom:	mov	al,#0x4c	! display an 'L' LIL
-	call	display
+	call	display								!!"LILO"의 3번째 'L'을 출력한다.
 	xor	ax,ax		! get pointer to disk parameter table in DS:SI
 	mov	ds,ax
 	lds	si,0x78		!! 0x0000:0x78 에 있는 값이 DS:SI에 설정이 된다. 
 					!! DS:SI의 값이 0xF000:0xEFC7
 					!! 0x1e 인터럼트 참조
+					!! 0x0000:0x0078은 real-mode에서의 인터럽트 백터 테이블 
+					!! 영역에 속한다.(0x78 /4 = 0x1e) 
+   					!! 1E에 해당되는 엔트리 위치가 바로 0x000:0078	
 
 					!! Disk Initialization Parameter Table Vector를
 					!! 수정하는 작업
+
+					!! Disk Initialization Parameter Table Vector Definition:
+					!! 12byte로 구성
+					!! 
+					!! offset 
+					!! 00        controller mode 
+					!! 01        Disk Controller Mode
+					!! 02 clock ticks until motor off
+					!! 03 FM or MFM Mode
+					!! 04 last sector on track
+					!! 05 gap length in bytes
+					!! 06 disk data length
+					!! 07 gap length when formatting
+					!! 08 data pattern used during formatting
+					!! 09 floppy head bounce delay
+					!! 0A floppy motor start delay
+					!! 0B flopy motor stop delay
+
 #ifndef LCF_XL_SECS
 	cmp	byte ptr (si+4),#9 ! okay ?  		!!last sector on track 과 9를 비교한다.
 	ja	dskok		! yes -> do not patch 	!! 9보다 크면 dskok로 가라.
+											!! 여기서 9는 '한 트랙 당 섹터 수'의 가능한 최소값이다.??
 #endif
 	push	cs		! get pointer to new area in ES:DI
 	pop	es			!! CS에 있는 값을 ES로 넣는다.
 	mov	di,#dskprm	!! dskprm(12bytes)의 위치를 di에 저장
 	mov	cx,#6		! copy 12 bytes
 	rep
-	movsw			!! DS:SI를 ES:DI로 mov
-	seg	es		! patch number of sectors !! 포인터를 dskprm으로 지정한다.
+	movsw			!! DS:SI를 ES:DI로 mov 즉disk initialization parameter table 백터를 
+					!! ES:DI 영역으로 복사한다.
+	seg	es		! patch number of sectors !! 포인터를 dskprm으로 지정한다. 
 #ifndef LCF_XL_SECS
 	mov	byte ptr (di-8),#18		!! last sector on track의 값을 18로 바꾼다.
+								!! di가 현재 vector table의 끝을 가르키고 있기 때문에
+								!! -8을 해주면 last sector on track을 가르킨다.
 #else
 	mov	byte ptr (di-8),#LCF_XL_SECS
 #endif
@@ -141,7 +178,10 @@ comcom:	mov	al,#0x4c	! display an 'L' LIL
 	mov	0x78,#dskprm	!!기존의 disk parameter vector table의 위치를
 						!!우리의 0x9B00:#dskprm로 바꾼다.
 	mov	0x7a,es			!!여기까지.
-	sti
+	sti					
+					!! 여기 까지가 Disk Initialization Parameter Table Vector를
+					!! 수정하는 작업에 해당한다.
+
 dskok:	seg	cs		! clear the break flag
 	mov	byte ptr break,#0	!! break에 0을 저장.
 	call	instto		! get timer interrupt
@@ -161,6 +201,9 @@ restrt: mov	ax,cs		! adjust segment registers
 ;;;	cli			! reset SP (we might have restarted with some
 	mov	sp,#STACK	! data on the stack)
 ;;;	sti
+					!! second.S가 잘 로딩 되었는지 검사한다.
+					!! BOOTPARM_2의 값들중 'LILO'와 STAGE_SECOND, VERSION
+				    !! 을 검사한다.	
 	cmp	sig,#0x494c	! check that this is really loaded at the !!0x494C == 'LI'
 				! right place ...
 	jne	crshbrn
@@ -170,62 +213,67 @@ restrt: mov	ax,cs		! adjust segment registers
 	jne	crshbrn
 	cmp	version,#VERSION
 	jne	crshbrn
-	mov	cmdbeg,#acmdbeg	! probably unattended boot
+	mov	cmdbeg,#acmdbeg	! probably unattended boot !!TODO
+					!! 여기까지가 무결성 검사 완료
 ldsc:
 ;;;	mov	al,#1		! load the descriptor table
 	mov	bx,#DESCR
 	seg	ss
-	mov	cx,DSC_OFF+SSDIFF
+	mov	cx,DSC_OFF+SSDIFF   !!BOOT_PARAMS_1->descr[0]의 sector,track 값을 cx에 저장
 	seg	ss
-	mov	dx,DSC_OFF+2+SSDIFF
+	mov	dx,DSC_OFF+2+SSDIFF !!BOOT_PARAMS_1->descr[0]의 device,head 값을 dx에 저장
         seg     ss
-	mov	al,DSC_OFF+4+SSDIFF     ;;;
-	call	cread			!!0x9200:0x2200에 저장
+	mov	al,DSC_OFF+4+SSDIFF !!BOOT_PARAMS_1->descr[0]의 num_sect값을 al에 저장
+	call	cread			!!해당 섹터값을 읽어 0x9200:0x2200에 저장
 	jc	fdnok		! error -> retry
 ;;;	mov	al,#1		! load the second sector
-	mov	bx,#DESCR+512
+	mov	bx,#DESCR+512       !!다음 decriptor table을 저장할 위치는 512바이트 이후이다.
 	seg	ss
-	mov	cx,DSC_OFF2+SSDIFF
+	mov	cx,DSC_OFF2+SSDIFF !!BOOT_PARAMS_1->descr[1]의sector,track값을 cx에 저장
 	seg	ss
-	mov	dx,DSC_OFF2+2+SSDIFF
+	mov	dx,DSC_OFF2+2+SSDIFF !!BOOT_PARAMS_1->descr[1]의device,head값을 dx에 저장
         seg     ss                      ;;;
-	mov	al,DSC_OFF2+4+SSDIFF    ;;;
-	call	cread
+	mov	al,DSC_OFF2+4+SSDIFF !!BOOT_PARAMS_1->descr[1]의 num_sect값을 al에 저장
+	call	cread            !!해당 섹터값을 읽어 0x9200:0x2200+512에 저장
 	jc	fdnok		! error -> retry !! BOOT_PARAMS_1->descr[0~1]을 메모리로 load하는것을 완료
 	mov	si,#DESCR	! compute a checksum of the descriptor table
 	mov	bx,#INIT_CKS
 	cld
-	mov	cx,#0x200
-csloop:	lodsw		!! DS:SI의 값을 AX에 저장
-	xor	bx,ax
+	mov	cx,#0x200   !! 0x200 == 512를 의미 한다.
+csloop:	lodsw		!! DS:SI의 값을 AX에 저장 즉, 첫번째 descriptor가 저장되어 있는 위치
+	xor	bx,ax		!! xor를 통하여 2byte 씩 체크섬 결과값을 bx에 누적시킨다.
 	loop	csloop	!! 2개의 섹터 1024bytes 만큼 체크섬 검사
-	or	bx,bx		! okay ?
+	or	bx,bx		! okay ? !! 누적된 bx의 값이 0이 나와야 정상이다.
 	jnz	chkerr		!! 체크섬 검사 완료
 	seg	ss		! load the keyboard translation table
 	mov	cx,MSG_OFF+SSDIFF+7		!! 0x9000:0xA000 + MSG_OFF + 7 = BOOT_PARMS_1->keytab
+	                            !! sector,track값을 cx에 저장
 	seg	ss
-	mov	dx,MSG_OFF+SSDIFF+9		!!
+	mov	dx,MSG_OFF+SSDIFF+9		!! BOOT_PARAMS_1->keytab의 device,head값을 dx에 저장
         seg     ss                      ;;;
-	mov	al,MSG_OFF+SSDIFF+11    ;;; !! 
-	mov	bx,#KEYTABLE				!! 섹터정보를 읽을 위치를 지정
+	mov	al,MSG_OFF+SSDIFF+11    !! BOOT_PARAMS_1->keytab의 num_sect값을 al에 저장
+	mov	bx,#KEYTABLE			!! 섹터정보를 읽을 위치를 지정
+								!! 0x9200:0x2800에 저장된다.
 ;;;	mov	al,#1
 	call	cread
 	jc	fdnok
 ;;;	mov	al,#1		! load the default command line
-	mov	bx,#DFLCMD
+	mov	bx,#DFLCMD				!! 0x2600
 	seg	ss
-	mov	cx,DFCMD_OFF+SSDIFF		!! BOOT_PARAMS_1->descr[2]의 값을 가져온다.
+	mov	cx,DFCMD_OFF+SSDIFF		!! BOOT_PARAMS_1->descr[2]의 값을 가져온다. 
+								!! setor,track값을 가져온다.
 	seg	ss
-	mov	dx,DFCMD_OFF+2+SSDIFF
+	mov	dx,DFCMD_OFF+2+SSDIFF   !! device,head값을 가져온다.
 	seg	ss                      ;;;
-	mov	al,DFCMD_OFF+4+SSDIFF   ;;;
-	call	cread
+	mov	al,DFCMD_OFF+4+SSDIFF   !! num_sect값을 가져온다.
+	call	cread				!! 0x9200:0x2600에 default command line을 로드한다.
 	jc	fdnok		! error -> retry !! load default command line완료
 	mov	bx,#DFLCMD
 	cmp	word ptr (bx),#DC_MAGIC ! okay ?
 	jne	bdcmag		! no -> do not write 
 #ifndef LCF_READONLY
 	mov	word ptr (bx),#DC_MGOFF ! erase the magic number
+								!! 매직 코드값을 바꾸고 disc에 write 한다.
 ;;;	mov	al,#1
 	seg	ss
 	mov	cx,DFCMD_OFF+SSDIFF
@@ -314,7 +362,7 @@ extp:	seg	ss		! external parameters ?
 	mov	byte ptr EX_OFF+6,#0		 !! ext_dl값에 0을 저장한다.
 	seg	ss		! load the signature pointer
 	les	bx,EX_OFF					 !! ss:EX_OFF의 주소값을 es:bx에 저장한다.
-	seg	es		! "LI" ?			 !! 
+	seg	es		! "LI" ?			 !! first.S의 85~100 라인 참고
 	cmp	(bx),#EX_MAG_L
 	jne	noex		! no -> go on
 	seg	es		! "LO" ?
@@ -1234,11 +1282,11 @@ nokay:	br	display		! display it
 
 ! Display a NUL-terminated string on the console
 
-say:	mov	al,(bx)		! get byte
-	or	al,al		! NUL ?
-	jz	aret		! yes -> done
+say:	mov	al,(bx)		! get byte !! al에는 'O'가 들어 간다.
+	or	al,al		! NUL ?        !! 문자열의 마지막을 검사
+	jz	aret		! yes -> done  !! return 한다.
 	push	bx		! save pointer
-	cmp	al,#10		! \n ?
+	cmp	al,#10		! \n ?         !! al값이 '\n'이면 CRLF를 display한다.
 	jne	nonl		! no -> go on
 	mov	al,#13		! display a CRLF
 	call	display
@@ -1246,13 +1294,15 @@ say:	mov	al,(bx)		! get byte
 nonl:	cmp	al,#12		! ^L ?
 	jne	nocls		! no -> go on
 	mov	ah,#0xf		! clear the local screen
-	int	0x10
+	int	0x10		!! 0x10-0xf 인터럽트를 통해 mode currently set을 
+					!! al 레지스터에 받아온다.
 	xor	ah,ah
-	int	0x10
+	int	0x10		!! 0x10-0 을 통하여 video mode를 셋팅한다. 
+					!! 이렇게 하면 'clear the local screen'이 되나보다.
 	jmp	snext		! next character
 nocls:	call	display		! display, tty-style
-snext:	pop	bx
-	inc	bx		! next one
+snext:	pop	bx		!! bx 값을 다시 가져와서
+	inc	bx		! next one !! 다음 포인팅 연산을 한다.
 	jmp	say
 
 ! Display one character on the console
@@ -1347,18 +1397,20 @@ acnosp:	test	byte ptr timeout,#1 ! timed out ?
 shpress:stc			! set carry
 	ret			! done
 
-! Timeout handling 0x1C 핸들러를 등록한다.
+!! Timeout handling 0x1C 핸들러를 등록한다.
 !! Time interrupt 
-instto:	push	ds		! install the timeout handler
+instto:	push	ds		! install timeout handler
 	xor	ax,ax
 	mov	ds,ax
 	cli			! no interrupts
 	mov	ax,[0x1c*4]	! get the old vector 
-	seg	cs				!!
+	seg	cs				!! 
 	mov	int1c_l,ax		!! 0x1C의 old vector 를 저장
 	mov	ax,[0x1c*4+2]	
 	seg	cs
 	mov	int1c_h,ax		!! 여기까지 
+						!! 주소하나는 4bytes를 사용하기 때문에 
+						!! init1c_h:ini1c_l에 각각 저장 한다. 
 	mov	[0x1c*4],#tick	! install new vector
 	mov	[0x1c*4+2],cs	
 	sti			! done
@@ -1393,7 +1445,9 @@ toimmed:mov	byte ptr timeout,#0xff ! set the timed-out flag
 
 tick:	pushf			! save flags	!!현재 플레그값들을 스택에 모두 저장
 	seg	cs		! no timeout ?
-	cmp	cntdown,#0xffff					!!cntdown을 0xFFFF로 설정하면 우리꺼 안함
+	cmp	cntdown,#0xffff					!! cntdown을 0xFFFF로 설정하면 새로 등록한
+										!! time-interupt를 사용하지 않고 
+										!! 원래의 interrupt handler만 수행함
 	je	notzro		! yes -> go on		!! 같으면 notzro로 간다
 	seg	cs		! decrement counter
 	dec	cntdown							!!contdown을 감소하다가 0이되면
@@ -1401,7 +1455,8 @@ tick:	pushf			! save flags	!!현재 플레그값들을 스택에 모두 저장
 	jnz	notzro		! not zero -> go on
 	seg	cs		! set timeout flag
 	mov	byte ptr timeout,#0xff
-notzro:	popf			! done
+notzro:	popf			! done			!! 원래의 time-interrupt handler를	
+										!! 호출 해준다.
 	seg	cs
 	jmpi	(int1c_l)	! continue with old interrupt
 
