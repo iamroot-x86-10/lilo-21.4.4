@@ -336,22 +336,34 @@ atbol:	br	iloop		! done
 
 ! Ready to process user input
 
-dokay:	mov	bx,#ospc	! display 'O '
+dokay:
+	mov		bx, #ospc	! display 'O '
 	call	say			!! say는 스트링을 출력하는 함수
-	mov	ospc,#0		! disable the message !! 주소는 그냥 넣어주고, 변수는 ptr을 사용하여 값을 저장한다.
-	mov	word ptr vgaovr,#VGA_NOCOVR ! disable VGA override !!ptr은 C의 강제형변환과 같지않을까?
-	mov	word ptr memlim,#0 ! no memory limit
-	xor	ax,ax		! get the delay and disable further delays
-	seg	ss
-	xchg	ax,DSC_OFF-8+SSDIFF		!! ax에는 BOOT_PARAMS_1->delay값이 저장되고 delay에는 0으로 저장
-	or	old_del,ax	! remember delay!! old_del에 delay값을 저장한다.
-	mov	nodfl,#iloop	! interactive prompt if falling through
-	seg	ss		! enter boot prompt ?
-	cmp	byte ptr DSC_OFF+15+SSDIFF,#0 !! BOOT_PARAMS_1->prompt 0과 비교한다.
-	jne	extp		! yes -> check for external parameters
-	mov	nodfl,#bfirst	! boot first image if falling through
-	call	waitsh		! wait for a shifting key
-	jc	iloop		! key pressed -> enter interactive mode
+	mov		ospc, #0	! disable the message
+						!! 주소는 그냥 넣어주고, 변수는 ptr을 사용하여 값을 저장한다.
+
+	mov		word ptr vgaovr, #VGA_NOCOVR		! disable VGA override
+												!! VGA_NOCOVR = 0x8000
+	mov		word ptr memlim, #0					! no memory limit
+
+	xor		ax, ax		! get the delay and disable further delays
+	seg		ss
+
+	!! ax에는 BOOT_PARAMS_1->delay값이 저장되고 delay에는 0으로 저장
+	xchg	ax, DSC_OFF-8+SSDIFF
+
+	or		old_del, ax		! remember delay
+							!! old_del에 delay값을 저장한다.
+
+	mov		nodfl, #iloop	! interactive prompt if falling through
+
+	seg		ss				! enter boot prompt ?
+	cmp		byte ptr DSC_OFF+15+SSDIFF, #0 !! BOOT_PARAMS_1->prompt 0과 비교한다.
+	jne		extp			! yes -> check for external parameters
+
+	mov		nodfl, #bfirst	! boot first image if falling through
+	call	waitsh			! wait for a shifting key
+	jc		iloop			! key pressed -> enter interactive mode
 
 ! Check for external parameters
 
@@ -388,70 +400,84 @@ noex:	push	cs		! restore ES
 
 ! Command input processor
 
-iloop:	seg	ss		! message disabled ?
-	cmp	MSG_OFF+SSDIFF,#0
-	je	nomsg		! yes -> skip this
-	mov	bx,#crlf	! move to a new line
+iloop:
+	seg		ss			! message disabled ?
+	cmp		MSG_OFF+SSDIFF, #0
+	je		nomsg		! yes -> skip this
+	mov		bx,#crlf	! move to a new line
 	call	say
-	seg	ss		! load the message file
-	mov	cx,MSG_OFF+SSDIFF+2
-	seg	ss
-	mov	dx,MSG_OFF+SSDIFF+4
-	mov	bx,#MAP
-        seg     ss
-	mov	al,MSG_OFF+SSDIFF+6
+
+	seg		ss			! load the message file
+	mov		cx,MSG_OFF+SSDIFF+2
+	seg		ss
+	mov		dx,MSG_OFF+SSDIFF+4
+	mov		bx,#MAP
+	seg     ss
+	mov		al, MSG_OFF+SSDIFF+6
 	call	sread
 	call	loadfile
-	mov	ax,#SYSSEG
-	mov	ds,ax
-	xor	bx,bx		! set the terminating NUL and disable further
-				! messages
-	seg	ss
-	xchg	bx,MSG_OFF+SSDIFF
-	mov	byte ptr (bx),#0
-	xor	bx,bx		! display the message
+	mov		ax, #SYSSEG
+	mov		ds, ax
+	xor		bx, bx		! set the terminating NUL and disable further
+						! messages
+	seg		ss
+	xchg	bx, MSG_OFF+SSDIFF
+	mov		byte ptr (bx), #0
+	xor		bx, bx		! display the message
 	call	say
-	push	cs		! restore segment registers
-	pop	ds
+	push	cs			! restore segment registers
+	pop		ds
 	push	cs
-	pop	es
-nomsg:	mov	cmdbeg,#acmdbeg	! probably unattended boot
-	mov	si,#usrinpm	! interactive mode
-niloop:	mov	bx,#msg_p	! display boot prompt
+	pop		es
+
+nomsg:
+	mov		cmdbeg, #acmdbeg	! probably unattended boot
+	mov		si, #usrinpm		! interactive mode
+
+niloop:
+	mov		bx, #msg_p			! display boot prompt
 	call	say
-	mov	bx,#cmdline	! move cursor to the end of the line
-clend:	mov	al,(bx)
-	or	al,al		! at end ?
-	jz	cledne		! yes -> go on
-	push	bx		! display the character
+	mov		bx, #cmdline		! move cursor to the end of the line
+
+clend:
+	mov		al, (bx)
+	or		al, al		! at end ?
+	jz		cledne		! yes -> go on
+	push	bx			! display the character
 	call	display
-	pop	bx
-	inc	bx		! next one
-	jne	clend
-cledne:	mov	byte ptr prechr,#32 ! character before command line is a space
+	pop		bx
+	inc		bx			! next one
+	jne		clend
+
+cledne:
+	mov	byte ptr prechr, #32 ! character before command line is a space
 
 ! Input loop
 
-input:	seg	es		! interactive mode ?
+input:
+	seg		es			! interactive mode ?
 	cmp	byte ptr (si),#UI_MAGIC
-	je	kbinp		! yes -> get keyboard input
-	seg	es		! get non-interactive input
+	je	kbinp			! yes -> get keyboard input
+	seg	es				! get non-interactive input
 	mov	al,(si)
 	inc	si
-	jmp	gotinp		! go on
+	jmp	gotinp			! go on
 	
 tolist:	br	list		! ...
 
-kbinp:	mov	cx,#brto	! get a key
+kbinp:
+	mov		cx,#brto	! get a key
 	call	getkey
-gotinp:	cmp	al,#9		! TAB ?
+
+gotinp:
+	cmp	al,#9		! TAB ?
 	je	tolist		! yes -> list images
 	cmp	al,#63		! "?" ?
 	je	tolist		! yes -> list images
 	or	al,al		! NUL ?
-	je	nul		! yes -> go on
+	je	nul			! yes -> go on
 	cmp	al,#13		! CR ?
-	je	cr		! yes -> go on
+	je	cr			! yes -> go on
 	cmp	al,#8		! BS ?
 	je	todelch		! yes -> erase one character
 	cmp	al,#127		! DEL ?
@@ -466,7 +492,9 @@ gotinp:	cmp	al,#9		! TAB ?
 	ja	noblnk		! no space -> go on
 	cmp	(bx-1),al	! second space in a row ?
 	je	input		! yes -> ignore it
-noblnk:	cmp	bx,#cmdline+CL_LENGTH ! at end of buffer ?
+
+noblnk:
+	cmp	bx,#cmdline+CL_LENGTH ! at end of buffer ?
 	je	input		! yes -> ignore
 	mov	(bx),al		! store in the buffer
 	inc	bx		! increment pointer
@@ -509,7 +537,9 @@ nul:	push	bx		! automatic boot - wait for timeout
 	call	say
 	br	iloop		! return to interactive prompt
 
-cr:	mov	cmdbeg,#mcmdbeg ! probably manual boot
+cr:
+	mov		cmdbeg, #mcmdbeg ! probably manual boot
+
 crnul:	mov	byte ptr break,#0 ! clear the break flag
 	push	cs		! set ES to CS
 	pop	es
@@ -734,76 +764,93 @@ pwfail:	mov	bx,#msg_pf	! display an error message
 
 ! Boot the image BX points to
 
-doboot:	mov	byte ptr prechr,#61 ! switch to equal sign
-	push	bx		! save image descr
-	mov	bx,#msg_l	! say hi
+doboot:
+	mov	byte ptr prechr, #61	! switch to equal sign
+	push	bx					! save image descr
+	mov		bx, #msg_l			! say hi
 	call	say
-	pop	bx		! display the image name
+	pop		bx					! display the image name
 	push	bx
 	call	say
-	pop	si
-	add	si,#ADDR_OFFS
+	pop		si
+	add		si, #ADDR_OFFS
 	cld
+
 ! take care of the RAM disk first
-	mov	word ptr (rdmid),#0 ! clear address
-	lodsw			! number of bytes to load (low word)
-	mov	dx,ax
-	mov	rdszl,ax
-	lodsw			! high word
-	mov	rdszh,ax
-	xchg	ax,dx		! convert to pages
-	add	ax,#4095
-	adc	dx,#0
-	mov	bx,#4096
-	div	bx
-	mov	bx,ax
-	lodsw			! address of the first map sector
-	mov	cx,ax
+	mov	word ptr (rdmid), #0	! clear address
+	lodsw						! number of bytes to load (low word)
+	mov		dx, ax
+	mov		rdszl, ax
+	lodsw						! high word
+	mov		rdszh, ax
+	xchg	ax, dx				! convert to pages
+								!! ax: low dx: hogh
+	add		ax, #4095
+	adc		dx, #0
+	mov		bx, #4096
+	div		bx					!! dx:ax / bx ==> ax: 몫 dx: 나머지
+	mov		bx, ax
+
+	lodsw						! address of the first map sector
+	mov		cx, ax				!! sector,track
+
 	lodsw
-	mov	dx,ax
-        lodsb                   ;;;
+	mov		dx,ax				!! device,head
+    lodsb                   	;;; num_sect
+
 ;;;	inc	si		! skip number of sectors
-	or	bx,bx		! no RAM disk ?
-	jz	noramd		! yes -> skip it
-	push	si		! save SI, ES, and BX (RD size)
+	or		bx, bx				! no RAM disk ?
+	jz		noramd				! yes -> skip it
+	push	si					! save SI, ES, and BX (RD size)
 	push	es
 	push	bx
-	mov	bx,#MAP		! load the first map sector
+	mov		bx, #MAP			! load the first map sector
 ;;;	mov	al,#1
 	call	sread
-	mov	moff,#0
+	mov		moff, #0
 #ifdef DEBUG
 	mov bx,#stepa
 	call say
 #endif
-	mov	ah,#0x88	! okay, compute load address now
-	int	0x15		! get amount of memory ...
-	cmp	word ptr memlim,#0 ! limit set by user ?
-	je	noulim		! no -> continue
-	mov	ax,memlim	! use user limit
-	sub	ax,#1024	! -1 MB
-noulim:	cmp	ax,#0x3c00	! more than 16 MB ?
-	jbe	no16mb		! no -> go ahead
-	mov	ax,#0x3c00	! limit to 16 MB to be nice to the BIOS
-				! (kernel can still use "high" memory)
-no16mb:	shr	ax,2		! round to pages
-	pop	bx		! subtract RAM disk size
-	sub	ax,bx
-	jnc	rdokay		! panic if not enough space
-	cmp	ax,#128		! we probably need more than 512 kB for the
-	ja	rdokay		! kernel to be useful ...
-	mov	bx,#msg_rd	! complain
+	mov		ah, #0x88			! okay, compute load address now
+	int		0x15				! get amount of memory ...
+								!! ax = 1K의 갯수
+	cmp		word ptr memlim, #0	! limit set by user ?
+	je		noulim				! no -> continue
+	mov		ax, memlim			! use user limit
+	sub		ax, #1024			! -1 MB
+
+noulim:
+	cmp		ax, #0x3c00			! more than 16 MB ?
+	jbe		no16mb				! no -> go ahead
+	mov		ax, #0x3c00			! limit to 16 MB to be nice to the BIOS
+								! (kernel can still use "high" memory)
+
+no16mb:
+	shr		ax, 2				! round to pages
+								!! ax = 4K의 갯수
+	pop		bx					! subtract RAM disk size
+	sub		ax, bx
+	jnc		rdokay				! panic if not enough space
+	cmp		ax, #128			! we probably need more than 512 kB for the
+	ja		rdokay				! kernel to be useful ...
+	mov		bx,#msg_rd			! complain
 	call	say
-	jmpi	restrt,SECONDSEG ! ... and restart if we can
-rdokay:	add	ax,#256		! start is at first MB ...
-	shl	ax,4		! *16
-	mov	(gdt+0x1b),ax	! set up GDT
-	mov	byte ptr (gdt+0x1a),#0
-	mov	(rdmid),ax	! ... and remember that for patching setup
-	xor	ax,ax		! ES=0 is our secret code to load via GDT
-	mov	es,ax
-	mov	bx,#gdt
-	call	lfile		! load it
+	jmpi	restrt, SECONDSEG	! ... and restart if we can
+
+rdokay:
+	add		ax, #256			! start is at first MB ...
+								!! ax = ax + 256(단위 4K)
+								!! ax = ax + 1MB
+	shl		ax, 4				! *16
+
+	mov		(gdt+0x1b), ax		! set up GDT
+	mov		byte ptr (gdt+0x1a), #0
+	mov		(rdmid),ax			! ... and remember that for patching setup
+	xor		ax, ax				! ES=0 is our secret code to load via GDT
+	mov		es, ax
+	mov		bx, #gdt
+	call	lfile				! load it
 	pop	es		! restore ES and SI
 	pop	si
 noramd:
@@ -1047,9 +1094,11 @@ loadlow:call	loadfile	! load the system
 
 loadfile:
 	push	#SYSSEG		! load a file at SYSSEG:0000
-	pop	es
-	xor	bx,bx
-lfile:	call	load
+	pop		es
+	xor		bx, bx
+
+lfile:
+	call	load
 	jmp	lfile
 
 ! Load one sector. Issue an error at EOF.
@@ -1069,33 +1118,38 @@ loadopt:call	loadit		! load the sector
 
 ! Load one sequence of sectors. Leave outer function at EOF.
 
-load:	push	es		! save ES:BX
+load:
+	push	es		! save ES:BX
 	push	bx
-lfetch:	mov	si,moff		! get map offset
-	mov	cx,MAP(si)	! get address
-	mov	dx,MAP+2(si)
-	mov	al,MAP+4(si)
-	or	cx,cx		! at EOF ?
-	jnz	noteof		! no -> go on
-	or	dx,dx
-	jnz	noteof
-	pop	bx		! restore ES:BX
-	pop	es
-	pop	ax		! pop return address
-	ret			! return to outer function
-noteof:	add	si,#5		! increment pointer
-	mov	moff,si
-	cmp	si,#508		! page end ?
-	jb	doload		! no -> load it
-	mov	moff,#0		! reset pointer
-	push	cs		! adjust ES
-	pop	es
 
-        mov     bl,hinib        ;;; this might get clobbered
-        push    bx              ;;; so save it
+lfetch:
+	mov		si, moff			! get map offset
+	mov		cx, MAP(si)			! get address
+	mov		dx, MAP+2(si)		!! (MAP+si+2)
+	mov		al, MAP+4(si)
+	or		cx, cx				! at EOF ?
+	jnz		noteof				! no -> go on
+	or		dx, dx
+	jnz		noteof
+	pop		bx					! restore ES:BX
+	pop		es
+	pop		ax					! pop return address
+	ret							! return to outer function
+
+noteof:
+	add		si, #5				! increment pointer
+	mov		moff, si
+	cmp		si, #508			! page end ?
+	jb		doload				! no -> load it
+	mov		moff, #0			! reset pointer
+	push	cs					! adjust ES
+	pop		es
+
+    mov     bl,hinib        ;;; this might get clobbered
+    push    bx              ;;; so save it
 	mov	bx,#MAP		! load map page
 	call	sread
-        pop     ax              ;;; restore the hi-nibble
+    pop     ax              ;;; restore the hi-nibble
 	mov     hinib,al        ;;; 
 
 	mov	al,#0x2e	! print a dot
@@ -1123,33 +1177,37 @@ launch: push	es		! save ES:BX (why ???)
 
 ! Load one sector (called from load)
 
-doload:	pop	bx		! restore ES:BX
-	pop	es
+doload:
+	pop		bx		! restore ES:BX
+	pop		es
 
 ! Load a sequence of sectors, possibly moving into "high memory" (> 1 MB)
 ! afterwards.
 
-xread:	push	ax		! ES == 0 ?
-	mov	ax,es
-	or	ax,ax
-	pop	ax
-	jz	rdhigh		! yes -> read into high memory
-	br	sread
-rdhigh:	push	bx		! okay - DS:BX points to GDT in this case
-	mov	bx,#SYSSEG	! adjust ES:BX
-	mov	es,bx
-	xor	bx,bx
+xread:
+	push	ax			! ES == 0 ?
+	mov		ax, es
+	or		ax, ax
+	pop		ax
+	jz		rdhigh		! yes -> read into high memory
+	br		sread
+
+rdhigh:
+	push	bx			! okay - DS:BX points to GDT in this case
+	mov		bx, #SYSSEG	! adjust ES:BX
+	mov		es, bx
+	xor		bx, bx
 	call	sread		! load the sector(s)
-        mov     tempal,al
-	pop	bx		! get pointer to GDT
-	push	ax		! just in case ...
+	mov     tempal, al
+	pop		bx			! get pointer to GDT
+	push	ax			! just in case ...
 	push	cx
 	push	si
-	mov	si,bx		! turn ES:SI into pointer to GDT
+	mov		si, bx		! turn ES:SI into pointer to GDT
 	push	ds
-	pop	es
-	xor	cx,cx		! number of words to move
-	mov	ch,tempal
+	pop		es
+	xor		cx, cx		! number of words to move
+	mov		ch, tempal
 #ifdef DEBUG
 	push	si
 	push	bx
@@ -1178,53 +1236,71 @@ rdhigh:	push	bx		! okay - DS:BX points to GDT in this case
 	push	bx		! do the transfer. (save BX, CX and SI because
 	push	cx		! we are paranoid)
 	push	si
-	mov	ah,#0x87
-	int	0x15
-	pop	si
-	pop	cx
-	pop	bx
-	jc	badmov		! failed ...
-	seg	es		! move pointer
-	add	(si+0x1a),cx
-	seg	es
-	adc	byte ptr (si+0x1c),#0
-	seg	es
-	add	(si+0x1a),cx
-	seg	es
-	adc	byte ptr (si+0x1c),#0
-	sub	ax,ax		! put ES back to 0
-	mov	es,ax
-	pop	si
-	pop	cx
-	pop	ax
+	mov		ah, #0x87
+	int		0x15
+	pop		si
+	pop		cx
+	pop		bx
+	jc		badmov		! failed ...
+	seg		es			! move pointer
+	add		(si+0x1a), cx
+	seg		es
+	adc		byte ptr (si+0x1c),#0
+	seg		es
+	add		(si+0x1a),cx
+	seg		es
+	adc		byte ptr (si+0x1c),#0
+	sub		ax,ax		! put ES back to 0
+	mov		es,ax
+	pop		si
+	pop		cx
+	pop		ax
 	ret			! done
 
-badmov:	push	ax		! save the error code
-	mov	bx,#msg_bm	! tell the user ...
-	br	reset		! (standard procedure)
+badmov:
+	push	ax			! save the error code
+	mov		bx,#msg_bm	! tell the user ...
+	br		reset		! (standard procedure)
 
 ! Load a sequence of sectors
 
-sread:	push	bx		! save registers
+sread:
+	push	bx		! save registers
 	push	cx
 	push	dx
 	call	cread
-	mov	di,ax		! save AL return count
-	jc	rerror		! error -> complain
-	pop	dx		! restore registers
+	mov		di, ax	! save AL return count
+	jc		rerror	! error -> complain
+	pop	dx			! restore registers
 	pop	cx
-rokay:	pop	bx
-        shl     ax,8            ; convert sectors to bytes
-        add     ah,ah
-	jc	dowrap		! loaded an entire segment -> advance ES
-	add	bx,ax		! move BX
-	jnc	nowrap		! same segment -> go on
-dowrap:	mov	ax,es		! move ES
-	add	ax,#0x1000
-	mov	es,ax
+
+rokay:
+	pop		bx
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	!! shl ax, 8 => al * 256 = ah
+	!! add ah, ah => ah * 2 ==> al * 512
+	!! 읽은 sector를 byte로 변환한다.
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	shl		ax, 8   ; convert sectors to bytes
+	add     ah, ah
+	jc		dowrap	! loaded an entire segment -> advance ES
+	add		bx, ax	! move BX
+	jnc		nowrap	! same segment -> go on
+
+dowrap:
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	!! overfllow 발생
+	!! es를 0x1000 증가
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	mov		ax, es		! move ES
+	add		ax, #0x1000
+	mov		es, ax
+
 nowrap:
-	mov	ax,di		! restore the block count in AL
-aret:	ret			! done
+	mov		ax, di		! restore the block count in AL
+
+aret:
+	ret					! done
 
 ! Read error - try a second time and give up if that fails too
 
@@ -1376,25 +1452,37 @@ noosht:
 
 ! Shift wait loop (AX = timeout, returns CY set if interrupred)
 
-waitsh:	call	setto		! set timeout
-actlp:	mov	ah,#2		! get shift keys
-	int	0x16
-	and	al,#0x5f	! anything set ? (except NumLock)
-	jnz	shpress		! yes -> return with CY set
-	mov	dx,slbase	! using a serial port ?
-	or	dx,dx
-	jz	acnosp		! no -> go on
-	cmp	byte ptr break,#0 ! break received ?
-	jnz	shpress		! yes -> return with CY set
-	add	dx,#5		! check for pending break
-	in	al,dx
+waitsh:
+	call	setto		! set timeout
+
+actlp:
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	!! int 0x16, 2: Read Keyboard Flags
+	!! 사용자가 Key입력을 할때까지 또는 delay 시간동안 아래를 수행
+	!! timeout이전에 키가 눌리면 set carry, 아니면 clear carry
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	mov		ah, #2		! get shift keys
+	int		0x16
+	and		al, #0x5f	! anything set ? (except NumLock)
+	jnz		shpress		! yes -> return with CY set
+	mov		dx, slbase	! using a serial port ?
+	or		dx, dx
+	jz		acnosp		! no -> go on
+	cmp	byte ptr break, #0 ! break received ?
+	jnz		shpress		! yes -> return with CY set
+	add		dx, #5		! check for pending break
+	in		al, dx
 	test	al,#0x10
-	jnz	shpress		! break received -> return with CY set
-acnosp:	test	byte ptr timeout,#1 ! timed out ?
-	jz	actlp		! no -> wait
+	jnz		shpress		! break received -> return with CY set
+
+acnosp:
+	test	byte ptr timeout, #1	! timed out ?
+	jz		actlp					! no -> wait
 	clc			! clear carry
 	ret			! done
-shpress:stc			! set carry
+
+shpress:
+	stc			! set carry
 	ret			! done
 
 !! Timeout handling 0x1C 핸들러를 등록한다.
@@ -1433,19 +1521,23 @@ remto:	push	es		! remove the interrupt handler
 
 ! AX = ticks, 0xffff = no timeout
 
-setto:	or	ax,ax		! time out immediately ?
-	jz	toimmed		! yes -> do it
-	cli			! set timeout value
-	mov	cntdown,ax
-	mov	byte ptr timeout,#0 ! clear timed-out flag
-	sti			! done
+setto:
+	or		ax, ax		! time out immediately ?
+	jz		toimmed		! yes -> do it
+	cli					! set timeout value
+	mov		cntdown, ax
+	mov	byte ptr timeout, #0	! clear timed-out flag
+	sti							! done
 	ret
-toimmed:mov	byte ptr timeout,#0xff ! set the timed-out flag
-	ret			! done
 
-tick:	pushf			! save flags	!!현재 플레그값들을 스택에 모두 저장
-	seg	cs		! no timeout ?
-	cmp	cntdown,#0xffff					!! cntdown을 0xFFFF로 설정하면 새로 등록한
+toimmed:
+	mov	byte ptr timeout, #0xff ! set the timed-out flag
+	ret							! done
+
+tick:
+	pushf			! save flags	!!현재 플레그값들을 스택에 모두 저장
+	seg		cs		! no timeout ?
+	cmp		cntdown,#0xffff				!! cntdown을 0xFFFF로 설정하면 새로 등록한
 										!! time-interupt를 사용하지 않고 
 										!! 원래의 interrupt handler만 수행함
 	je	notzro		! yes -> go on		!! 같으면 notzro로 간다
@@ -1798,11 +1890,11 @@ gdt:	! space for BIOS
 	.byte	0x93		! permissions
 	.word	0		! padding for 80286 mode :-(
 	! destination
-	.word	0xffff		! no limits
-	.word	0		! start - filled in by user
-	.byte	0
+	.word	0xffff		! no limits							GDT size
+	.word	0			! start - filled in by user			base 0 ~ 15
+	.byte	0			!! 16 ~ 23
 	.byte	0x93		! permissions
-	.word	0		! padding for 80286 mode :-(
+	.word	0			! padding for 80286 mode :-(
 	! space for BIOS
 	.blkb	0x10
 
