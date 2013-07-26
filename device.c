@@ -192,8 +192,8 @@ void preload_dev_cache(void)
 	sprintf(tmp,"/dev/sdb%d",i);
 	cache_add(tmp,0x810+i);
     }
-    for (i = 0; i <= 7; i++) {
-	sprintf(tmp,"/dev/loop%d",i);
-	cache_add(tmp,0x700+i);
-    }
+//    for (i = 0; i <= 7; i++) {
+	sprintf(tmp,"/dev/loop%d",0);
+	cache_add(tmp,0x700+0);
+//    }
 }

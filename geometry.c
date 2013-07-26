@@ -16,6 +16,7 @@
 #include <linux/fs.h>
 #include <linux/fd.h>
 #include <linux/hdreg.h>
+#include <linux/kdev_t.h>
 
 #include "config.h"
 #include "lilo.h"

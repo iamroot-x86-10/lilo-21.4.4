@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include <linux/fs.h>
+#include <linux/kdev_t.h>
 
 #include "config.h"
 #include "lilo.h"
@@ -23,6 +24,8 @@
 
 
 /* For older kernels ... */
+
+#define EXTENDED_PARTITION 0x85
  
 #ifndef DOS_EXTENDED_PARTITION
 #define DOS_EXTENDED_PARTITION EXTENDED_PARTITION

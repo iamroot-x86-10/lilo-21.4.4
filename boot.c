@@ -20,6 +20,7 @@
 #include "map.h"
 #include "partition.h"
 #include "boot.h"
+#include <asm/page.h>
 
 
 static GEOMETRY geo;
