@@ -854,55 +854,62 @@ rdokay:
 	pop	es		! restore ES and SI
 	pop	si
 noramd:
-	lodsw			! address of the first map sector
+	!! IMAGE_DESCRIPTOR -> SECTOR 를 불러옴
+	lodsw			! address of the first map sector !! es:si -> ax 복사
 	mov	cx,ax
 	lodsw
 	mov	dx,ax
 ;;;	inc	si		! skip number of sectors
-        lodsb                   ;;;
-        push    ax              ;;;
+    lodsb                   ;;;
+    push    ax              ;;;
 	mov	word ptr (gdt+0x1b),#0 ! set GDT to "load low"
-	lodsw			! get the start page
+	lodsw			! get the start page !! 0 이면 low 메모리에, 아니면 high 메모리에 
+										 !! IMAGE_DSECR->startpage
 	or	ax,ax		! load low ?
 	jz	nohigh		! yup -> do it
-	shl	ax,4		! *16
+	shl	ax,4		! *16  !! 4K 단위에서 256 바이트 단위로 변환
 	mov	(gdt+0x1b),ax	! set up GDT
 	mov	byte ptr (gdt+0x1a),#0
 nohigh:
-        pop     ax              ;;;
-	push	si		! save SI
+    pop     ax              ;;; !! ax 를 불러오면, start->num_sect 값
+	push	si		! save SI !! si 에는 IMAGE_DSECR->flag 를 가리키는 주소값 저장
 #ifdef DEBUG
         push    ax              ;;;
 	mov bx,#step0
 	call say
         pop     ax              ;;;
 #endif
+	!! [부가 설명] MAP load area (0x9D000) 에는 start page 의 sector 정보를 load
+    !! load 된 정보를 사용해서 실제 데이터 복사되는 주소는 SYSSEG = 0x100000 (1MB)
 	mov	bx,#MAP		! load the first map sector
 ;;;	mov	al,#1
-	call	sread
+	call	sread       
 	mov	moff,#0		! reset the pointer
 #ifdef DEBUG
 	mov bx,#step0b
 	call say
 #endif
-	mov	bx,#DFLCMD	! load the default command line
+	mov	bx,#DFLCMD	! load the default command line  !! es:bx 에 default command line 을 재로딩함
 	seg	ss
 	mov	cx,DFCMD_OFF+SSDIFF
 	seg	ss
 	mov	dx,DFCMD_OFF+2+SSDIFF
-        seg     ss                      ;;;
+    seg ss                      ;;;
 	mov	al,DFCMD_OFF+4+SSDIFF   ;;;
 ;;;	mov	al,#1
 	call	cread
-	push	word ptr (DFLCMD) ! push magic number
+	push	word ptr (DFLCMD) ! push magic number !! 바꾸어 놓은 magic number 는 0x6b6d
 	mov	bx,#DFLCMD	! load the fallback sector
-	call	load1
+	call	load1	!! MAP load area 에 있는 start page 의 sector 정보를 이용해서 한 섹터만 로딩 -> fallback sector
 	pop	ax		! valid magic number ?
 #ifndef LCF_READONLY
-	cmp	ax,#DC_MAGIC
+	cmp	ax,#DC_MAGIC	!! DC_MAGIC = 0xf4f2
 	je	dclok		! yes -> can write
-	cmp	ax,#DC_MGOFF
+	cmp	ax,#DC_MGOFF	!! DC_MGOFF = 0x6b6d
 	jne	nofbck		! invalid -> must not write
+
+!! Default Command Lind 에는 fallback sector 가 loading 되어 있고,
+!! fallback sector 를  default command line 인 것으로 가장하기 위해서 처음 두 바이트에 매직 넘버를 넣어줌
 dclok:	mov	bx,#DFLCMD	! fallback data present ?
 	cmp	word ptr (bx),#DC_MAGIC
 	jne	nofbck		! no -> go on
@@ -921,23 +928,25 @@ nofbck:
 	call say
 #endif
 	mov	bx,#DFLCMD	! load the options sector
-	call	load1
-	mov	si,cmdbeg	! copy non-options part of command line
-	mov	di,#PARMLINE
+	call	load1	!! load1 호출에서 복귀하는 방법은 찾지 못함
+	mov	si,cmdbeg	! copy non-options part of command line   !! si = MAP(si+10), cmdbeg = "auto "
+	mov	di,#PARMLINE	!! 0x2a00
 #ifdef	LCF_LARGE_EBDA
 	push	#INITSEG
 	pop	es
 #endif
-cpnocl:	cmp	si,options	! at beginning of options ?
-	je	cpnodn		! yes -> go on
-	movsb			! copy one byte
+!! Option 값들을 parameter 에 저장
+cpnocl:	cmp	si,options	! at beginning of options ?   !! options 에는 boot: 함수에서 저장된 부팅 옵션값(?) 이 들어있음
+	je	cpnodn		! yes -> go on  !! option 이 auto 이면 jump 
+									!! -> 옵션 값들이 들어있다고 하더라도 마지막에는 auto 가 있어야 될 것으로 추측됨
+	movsb			! copy one byte !! DS:SI -> ES:DI 로 복사
 	jmp	cpnocl		! next one
 cpnodn:	mov	si,#DFLCMD	! constant options ?
-	cmp	byte ptr (si),#0
+	cmp	byte ptr (si),#0	!! option sector 의 첫 번째 바이트 값을 0 과 비교 -> null 인지 체크하는 용도
 	je	nocopt		! no -> go on
 	mov	al,#32		! add a space
-	stosb
-cpcodsp:lodsb			! fetch next byte
+	stosb			!! al -> es:di 1 바이트 저장하고 di = di +1
+cpcodsp:lodsb			! fetch next byte  !! ds:si -> al
 	cmp	al,#32		! space ?
 	je	cpcodsp		! yes -> discard it
 cpcolp:	or	al,al		! NUL ?
@@ -948,7 +957,7 @@ cpcolp:	or	al,al		! NUL ?
 	lodsb			! get next byte
 	jmp	cpcolp
 cpcodn:	seg	es
-	cmp	byte ptr (di-1),#32 ! last was space ?
+	cmp	byte ptr (di-1),#32 ! last was space ?  !! pamameter line 의 마지막 값을 space 와 비교
 	jne	nocopt		! no -> go on
 	dec	di		! discard it
 nocopt:	mov	si,options	! append variable options
@@ -960,42 +969,44 @@ cpvalp:	lodsb			! copy one byte
 	mov bx,#step2
 	call say
 #endif
-	push	#INITSEG	! load the original boot sector
+	push	#INITSEG	! load the original boot sector  !! INITSEG = 0x9000
 	pop	es
 	xor	bx,bx		! load now
-	call	load1
+	call	load1	!! option sector 다음 sector 인  boot sector 를 읽어옴
 	seg	es
-	mov	CL_MAGIC_ADDR,#CL_MAGIC ! set magic number
+	mov	CL_MAGIC_ADDR,#CL_MAGIC ! set magic number  !! CL_MAGIC_ADDR = 0x20, CL_MAGIC = 0xa33f
+													!! es:0x0020 <- 0xa33f
 #ifndef LCF_LARGE_EBDA
 	seg	es
-	mov	word ptr CL_OFFSET,#PARMLINE+SECOND_SS
+	mov	word ptr CL_OFFSET,#PARMLINE+SECOND_SS		!! 0x9000:(0xB000+0x2a00) = 0x9DA00
+													!! es:0x0022 <- 0x9DA00
 				! set parameter line offset
 #else
 	seg	es
 	mov	word ptr CL_OFFSET,#PARMLINE
 				! set parameter line offset
 #endif
-	pop	si		! restore SI
+	pop	si		! restore SI	!! IMAGE_DESC->flag 주소값 불러옴 
 	lodsw			! get flags bit map
-	mov	bx,ax
+	mov	bx,ax		!! flag 값 저장 
 	lodsw			! copy parameters ... VGA mode ... (done)
 	cmp	word ptr vgaovr,#VGA_NOCOVR ! VGA mode not overridden on
 				! command line ?
 	je	vganorm		! no -> go on
 	mov	ax,vgaovr	! use that value
 	jmp	vgaset
-vganorm:test	bx,#FLAG_VGA
-	jz	novga
+vganorm:test	bx,#FLAG_VGA  !! FLAG_VGA = 1
+	jz	novga			  !! FLAG_VGA 다르면 jump
 vgaset:	seg	es
-	mov	506,ax
+	mov	506,ax			!! 0x90506 <- ax
 novga:	push	bx		! use flags (BX) later
-	test	bx,#FLAG_LOCK	! ... lock target ?
-	jnz	lockit		! yup -> do it
+	test	bx,#FLAG_LOCK	! ... lock target ?  !! FLAG_LOCK = 4
+	jnz	lockit		! yup -> do it   			 !! 같으면 jump
 	cmp	byte ptr dolock,#0 ! did user ask to lock new target ?
 	je	nolock		! no -> go on
 lockit:
 #ifndef LCF_READONLY
-	mov	bx,#lkwbuf	! save the command line
+	mov	bx,#lkwbuf	! save the command line  !! lkwbuf = 0xf4f2
 	seg	ss
 	mov	cx,DFCMD_OFF+SSDIFF
 	seg	ss
@@ -1011,7 +1022,8 @@ lockit:
 	mov	al,DFCMD_OFF+4+SSDIFF   ;;;
 
 	push	si
-	call	cwrite
+	call	cwrite   !! 0x9b00:#lkwbuf 부터의 데이터를 디스크 writing  
+					 !! 다음 부팅부터는 사용자가 입력한 값을 자동으로 불러옴 ; auto save 기능
 	pop	si
 	pop	es
 #endif
@@ -1021,7 +1033,7 @@ nolock:
 	call say
 	seg	es
 #endif
-	mov	cx,#SETUPSECS	! default is to load four sectors
+	mov	cx,#SETUPSECS	! default is to load four sectors  !! SETUPSECS = 4
 #ifdef LCF_VARSETUP
 	seg	es		! variable number of sectors ?
 	cmp	byte ptr VSS_NUM,#0
@@ -1031,23 +1043,24 @@ nolock:
 #endif
 lsetup:	
 ;;;	mov	ax,#SETUPSEG
-	push	#SETUPSEG	! load the setup (might meet EOF in the
+	push	#SETUPSEG	! load the setup (might meet EOF in the   !! SETUPSEG = 0x9020
 ;;;	mov	es,ax
 	pop	es		! process of loading the boot sector of an
 	xor	bx,bx		! other operating system)
 lsloop:	push	cx
-	call	loadopt
+	call	loadopt				!! MAP Load Area 의 4 번째를 불러옴 
+								!! [0] fallback, [1] option, [2] boot, [3] setup.S
 	pop	cx
-	loop	lsloop
+	loop	lsloop		 
 #ifdef DEBUG
 	mov bx,#step4
 	call say
 #endif
 	pop	bx		! get flags
-	test	bx,#FLAG_MODKRN	! "modern" kernel ?
+	test	bx,#FLAG_MODKRN	! "modern" kernel ?	  !! FLAG_MODKRN = 8
 	jz	loadlow		! no -> avoid all patching and such
-	seg	es		! set loader version
-	mov	byte ptr (16),#LOADER_VERSION
+	seg	es		! set loader version	!! es = 0x9020
+	mov	byte ptr (16),#LOADER_VERSION	!! 0x9020:0x0010 = 0x90210
 	seg	es		! version >= 1 ?
 	cmp	word ptr (6),#NEW_HDR_VERSION
 	jbe	noheap		! no -> do not patch heap
@@ -1085,8 +1098,8 @@ nordpt:	cmp	word ptr (gdt+0x1b),#0 ! load low ?
 	mov	byte ptr (17),#LFLAG_HIGH
 #endif
 	xor	ax,ax		! GDT is already set up ...
-	mov	es,ax
-	mov	bx,#gdt
+	mov	es,ax		!! es == 0 이면 gdt 의 destination 주소값으로 복사, destination 설정은 rdokay 에서
+	mov	bx,#gdt		!! lfile 에서 호출하는 doload 에서 bx 값으로 gdt 의 destination 값을 사용함
 	call	lfile		! load the system ...
 	jmp	launch		! ... and run it
 loadlow:call	loadfile	! load the system
@@ -1158,8 +1171,8 @@ noteof:
 
 ! Start the kernel
 
-launch: push	es		! save ES:BX (why ???)
-	push	bx
+launch: push	es		! save ES:BX (why ???)	!! es = 0 
+	push	bx									!! bx = #gdt
 	mov	bx,#crlf	! display a CRLF
 	call	say
 	mov	dx,#0x3f2	! stop the floppy motor
@@ -1169,11 +1182,11 @@ launch: push	es		! save ES:BX (why ???)
 	mov	dl,al
 	int	0x13
 	call	remto		! free timer interrupt
-	push	#INITSEG	! adjust segment registers
+	push	#INITSEG	! adjust segment registers	!! 0x9000
 	pop	ds
 	push	ds
 	pop	es
-	jmpi	0,SETUPSEG	! start the setup
+	jmpi	0,SETUPSEG	! start the setup	!! 0x9020 -> Setup.S 가 loading 되어 있는 곳, kernel 코드 시작
 
 ! Load one sector (called from load)
 
@@ -2025,7 +2038,7 @@ vgaovr:	.word	0		! VGA mode overwrite
 memlim:	.word	0		! memory limit
 dskprm:	.word	0,0,0,0,0,0
 
-lkwbuf:	.word	DC_MAGIC
+lkwbuf:	.word	DC_MAGIC !! 0xf4f4
 lkcbuf:	.blkb	256
 dolock:	.byte	0
 
